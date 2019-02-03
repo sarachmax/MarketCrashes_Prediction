@@ -11,6 +11,7 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import pandas as pd 
 import seaborn as sns
+from sklearn.cluster import SpectralClustering, KMeans 
 
 
 # Log periodic function
@@ -83,13 +84,14 @@ if __name__ == '__main__':
     # dataset 
 #    dataset = pd.read_csv("Dataset/SET_1D.csv")
     dataset = pd.read_csv("Dataset/SEHK_30Min_2800.csv")
+    fit_df = pd.DataFrame(columns=['winsize','o', 'm', 'A', 'B', 'C', 'tau','raw_tau'])
     
     raw_data = dataset.Close
     data = np.array(dataset.Close)
     data = np.log(data)
     
     
-    window_sizes = [120, 240, 480, 640, 960] 
+    window_sizes = [1100, 2200, 3300, 4400, 5500, 6600] 
     mean_crash_point = [] 
     all_crash_point = [] 
     crash_point = {} 
@@ -98,6 +100,8 @@ if __name__ == '__main__':
     start = np.max(window_sizes)
     stop = len(data) 
     jump_size = np.min(window_sizes)
+    if jump_size >= 1000 : 
+        jump_size = int(jump_size/2)
     max_windows = np.max(window_sizes)
     num_windows = len(window_sizes)
     for i in range(start, stop, jump_size):
@@ -126,13 +130,38 @@ if __name__ == '__main__':
                 crash_point[size].append(c_time)
                 c_point.append(c_time)
                 all_crash_point.append(c_time)
+                fit_df = fit_df.append({'o':  popt[0], 
+                                            'm':  popt[1], 
+                                            'A':  popt[2], 
+                                            'B':  popt[3], 
+                                            'C':  popt[4],
+                                            'winsize': size,
+                                            'raw_tau': int(popt[5]),
+                                            'tau' :  c_time},ignore_index=True)
             median_point = np.median(c_point) 
             if not np.isnan(median_point) : 
                 mean_crash_point.append(median_point)
+
+
+    print('======= Clustering ============')
+    n_clusters = 4
+
+
+    X = fit_df.drop(columns=['A','tau', 'winsize'])
+    clustering = SpectralClustering(n_clusters=n_clusters,
+        assign_labels="discretize",
+        random_state=0).fit(X)
+    y = clustering.labels_
+    fit_df['label'] = y 
+    
+    # clustering = KMeans(n_clusters=n_clusters).fit_predict(X)
+    # fit_df['label'] = clustering
+    print('======= Clustering End ========')
     
     plot_all = False 
-    plot_mean = True
-    plot_each_window= True 
+    plot_mean = False
+    plot_each_window= False 
+    plot_clustering = True 
     
     if plot_all : 
         survive_time = [] 
@@ -177,7 +206,23 @@ if __name__ == '__main__':
             for x in crash_point[size] :
                 plt.axvline(x, color='red')
             plt.show()
+
+    if plot_clustering : 
+        for group_num in range(n_clusters): 
+            plt.figure()
+            plt.plot(raw_data)
+            title = 'Group  ' + str(group_num) 
+            plt.title(title)
+            for i in range(len(fit_df)):
+                if fit_df['label'][i] == group_num : 
+                    x = fit_df['tau'][i]
+                    plt.axvline(x, color='blue')    
+            plt.show()  
+
+            
                 
+     
+
         
             
         
