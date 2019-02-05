@@ -67,17 +67,46 @@ def minABC_y(x, o, m, tau):
 
     return tuple(vec_hat.flatten())
 
+def is_pass_params_rules(params):
+    """
+    0.1 ≤ m ≤ 0.9, 6 ≤ omega ≤ 13, |C| < 1, B < 0.
+    """
+    o, m, A, B, C, tau = params[0], params[1], params[2], params[3], params[4], params[5] 
+    if abs(m) > 1 : 
+        return False 
+    if o < 6 or o > 13 : 
+        return False 
+    if abs(C) > 1 : 
+        return False 
+    if B > 0 :
+        return False 
+    if A < 0 :
+        return False 
+    if tau == 0 :
+        return False 
+    return True 
+
 def init_fit_params(data): 
     # Fit parameters 
-    o = 20.0    #omega
-    m = 1.0
-    A = 1.0
-    B = -1.0
-    C = 0.5
-    t = 3.0     #tc 
     sp = data[-1]
-    p0 = (sp, m, A, B, C, t)
+    o = 10    # Frequency = omega 
+    m = 0.5    # Power
+    A = sp     # Intercept
+    B = -1      
+    C = 0.5     # Coefficient
+    t = 20    # Critical time
+    p0 = [o, m, A, B, C, t]
     return p0 
+
+def E_func(params):
+    ret = y(xd, params[0], params[1], params[2], params[3], params[4], params[5])
+
+    n = float(len(ret))
+    er = (ret - yd).dot(ret - yd) / n
+
+    if np.isnan(er):
+        er = 1e10
+    return er
 
 if __name__ == '__main__':
     # dataset 
@@ -86,12 +115,12 @@ if __name__ == '__main__':
     fit_df = pd.DataFrame(columns=['winsize','o', 'm', 'A', 'B', 'C', 'tau','raw_tau'])
     
     raw_data = dataset.Close
-    data = dataset['Close'].ewm(span=55,min_periods=0,adjust=False,ignore_na=False).mean()
+    data = dataset['Close'].ewm(span=11*10,min_periods=0,adjust=False,ignore_na=False).mean()
     data = np.array(data)
     data = np.log(data)
     
     print('========== Fitting ============') 
-    window_sizes = [1100, 2200, 3300, 4400, 5500, 6600] 
+    window_sizes = [1100, 2200, 3300, 4400] 
     mean_crash_point = [] 
     all_crash_point = [] 
     crash_point = {} 
@@ -113,44 +142,59 @@ if __name__ == '__main__':
             yd = data[i-size:i]
             
             p0 = init_fit_params(yd)
-            maxfev = 5000
+            maxfev = 15000
             while True : 
                 try :
                     popt, pcov = curve_fit(y, xd, yd, p0=p0, maxfev=maxfev)
+                    
                     break 
                 except KeyboardInterrupt : 
                     break
                 except : 
-                    if maxfev >= 20000 :
+                    if maxfev >= 30000 :
                         print("No fitting point on " + str(i) + " to " + str(i+max_windows))
                         break 
                     else : 
                         print("No Fitting ... Try to fit data again ... ")
-                        maxfev = 20000
+                        maxfev = 30000
             c_time = int(popt[5]+i)
-            if c_time > i + size + 1  and c_time < stop and popt[2] > 0 : 
+            if is_pass_params_rules(popt) : 
+                err = E_func(popt)
+                params_fit = popt 
+                o, m, A, B, C, tau = params_fit[0], params_fit[1], params_fit[2], params_fit[3], params_fit[4], params_fit[5]
+                print("\n"*1)
+                print("Fitting on window size :", size)
+                print("Params: params_fit    \no:", o, 
+                                            "\nm:",  m, 
+                                            "\nA:",  A, 
+                                            "\nB:", B, 
+                                            "\nC:",  C,
+                                            "\ntau:", tau,
+                                            "\nc_time:", c_time,
+                                            "\nerr:", err)      
+                print("\n"*1) 
                 crash_point[size].append(c_time)
                 c_point.append(c_time)
                 all_crash_point.append(c_time)
-                fit_df = fit_df.append({'o':  popt[0], 
-                                            'm':  popt[1], 
-                                            'A':  popt[2], 
-                                            'B':  popt[3], 
-                                            'C':  popt[4],
+                fit_df = fit_df.append({    'o':  o, 
+                                            'm':  m, 
+                                            'A':  A, 
+                                            'B':  B, 
+                                            'C':  C,
                                             'winsize': size,
-                                            'raw_tau': int(popt[5]),
-                                            'tau' :  c_time},ignore_index=True)
+                                            'raw_tau': int(tau),
+                                            'tau' :  c_time}, ignore_index=True)
             else : 
-                print("Fitting Failed on " + str(i-max_windows) + " to " + str(i) + " of " + str(stop))
+                print("Fitting not pass " + str(i-max_windows) + " to " + str(i) + " of " + str(stop))
             median_point = np.median(c_point) 
             if not np.isnan(median_point) : 
                 mean_crash_point.append(median_point)
-    fit_df.to_csv("Dataset/fitted_result.csv",index=False)
+    fit_df.to_csv("Dataset/fitted_result_curve_fit.csv",index=False)
     print('======= Clustering ============')
 
     k_mean = False
 
-    n_clusters = 2
+    n_clusters = 4
 
     X = fit_df.drop(columns=['m','tau', 'winsize','raw_tau'])
     if not k_mean : 
@@ -164,10 +208,10 @@ if __name__ == '__main__':
         fit_df['label'] = clustering
     print('======= Clustering End ========')
     
-    plot_all = False 
+    plot_all = True 
     plot_mean = False 
-    plot_each_window= False   
-    plot_clustering = True 
+    plot_each_window= False  
+    plot_clustering = False  
     
 #    plt.figure()
 #    plt.plot(data)

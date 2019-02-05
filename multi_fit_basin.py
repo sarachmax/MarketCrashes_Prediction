@@ -135,6 +135,13 @@ def E_func(params):
         er = 1e10
     return er
 
+def get_critrical_label(params):
+    if B > 0 : 
+        return 1
+    return -1 
+    
+    
+
 if __name__ == '__main__':
     dataset = pd.read_csv("Dataset/SEHK_30Min_2800.csv")
     fit_df = pd.DataFrame(columns=['winsize','o', 'm', 'A', 'B', 'C', 'tau','raw_tau'])
@@ -151,7 +158,8 @@ if __name__ == '__main__':
     mystep = MyStepper(step_size)
     mybound = MyBounds()
 
-    window_sizes = [1100, 2200, 3300, 4400, 5500, 6600] 
+    # window_sizes = [1100, 2200, 3300, 4400, 5500, 6600] 
+    window_sizes = [2200] 
     mean_crash_point = [] 
     all_crash_point = [] 
     crash_point = {} 
@@ -160,7 +168,7 @@ if __name__ == '__main__':
     start = np.max(window_sizes)
     stop = len(data)
     jump_size = np.min(window_sizes)
-    # jump_size = 11*20
+    jump_size = 11*20
     if jump_size >= 1000 : 
         jump_size = int(jump_size/2)
     max_windows = np.max(window_sizes)
@@ -179,6 +187,7 @@ if __name__ == '__main__':
                 o, m, A, B, C, tau = params_fit[0], params_fit[1], params_fit[2], params_fit[3], params_fit[4], params_fit[5]
                 c_time = int(tau) + i
                 print("\n"*3)
+                print("Fitting on window size :", size)
                 print("Fitting on data point on " + str(i-max_windows) + " to " + str(i) + " of " + str(stop))
                 print("Global Minimum: E(params_fit) = {}".format(ret.fun))
                 print("Params: params_fit   '\no':", o, 
