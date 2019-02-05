@@ -82,14 +82,14 @@ def is_pass_params_rules(params):
         return False 
     if A < 0 :
         return False 
-    if tau == 0 :
+    if int(tau) <= 11 :
         return False 
     return True 
 
 def init_fit_params(data): 
     # Fit parameters 
     sp = data[-1]
-    o = 10    # Frequency = omega 
+    o = 9.5    # Frequency = omega 
     m = 0.5    # Power
     A = sp     # Intercept
     B = -1      
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     start = np.max(window_sizes)
     stop = len(data)
     jump_size = np.min(window_sizes)
-    jump_size = 11*20
+    jump_size = 11*5
     if jump_size >= 1000 : 
         jump_size = int(jump_size/2)
     max_windows = np.max(window_sizes)
@@ -142,24 +142,24 @@ if __name__ == '__main__':
             yd = data[i-size:i]
             
             p0 = init_fit_params(yd)
-            maxfev = 15000
+            maxfev = 50000
             while True : 
                 try :
                     popt, pcov = curve_fit(y, xd, yd, p0=p0, maxfev=maxfev)
-                    
+                    err = E_func(popt)
+                    print("Error :", err)
                     break 
                 except KeyboardInterrupt : 
                     break
                 except : 
-                    if maxfev >= 30000 :
+                    if maxfev >= 65000 :
                         print("No fitting point on " + str(i) + " to " + str(i+max_windows))
                         break 
                     else : 
                         print("No Fitting ... Try to fit data again ... ")
-                        maxfev = 30000
+                        maxfev = 80000
             c_time = int(popt[5]+i)
             if is_pass_params_rules(popt) : 
-                err = E_func(popt)
                 params_fit = popt 
                 o, m, A, B, C, tau = params_fit[0], params_fit[1], params_fit[2], params_fit[3], params_fit[4], params_fit[5]
                 print("\n"*1)
@@ -194,7 +194,7 @@ if __name__ == '__main__':
 
     k_mean = False
 
-    n_clusters = 4
+    n_clusters = 2
 
     X = fit_df.drop(columns=['m','tau', 'winsize','raw_tau'])
     if not k_mean : 
@@ -211,7 +211,7 @@ if __name__ == '__main__':
     plot_all = True 
     plot_mean = False 
     plot_each_window= False  
-    plot_clustering = False  
+    plot_clustering = True  
     
 #    plt.figure()
 #    plt.plot(data)
