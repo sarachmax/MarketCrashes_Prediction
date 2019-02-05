@@ -7,7 +7,7 @@ Created on Wed Jan 23 20:39:30 2019
 
 import numpy as np
 import scipy.stats as scs
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, basinhopping 
 import matplotlib.pyplot as plt
 import pandas as pd 
 import seaborn as sns
@@ -22,7 +22,6 @@ def y(x, o, m, A, B, C, tau):
 def res_fun(params, x, y_fit):
     return y(x, params[0], params[1], params[2], params[3], params[4],
              params[5]) - y_fit
-
 
 # Log periodic function #2
 def y_2(x, o, m, tau):
@@ -87,10 +86,11 @@ if __name__ == '__main__':
     fit_df = pd.DataFrame(columns=['winsize','o', 'm', 'A', 'B', 'C', 'tau','raw_tau'])
     
     raw_data = dataset.Close
-    data = np.array(dataset.Close)
+    data = dataset['Close'].ewm(span=55,min_periods=0,adjust=False,ignore_na=False).mean()
+    data = np.array(data)
     data = np.log(data)
     
-    
+    print('========== Fitting ============') 
     window_sizes = [1100, 2200, 3300, 4400, 5500, 6600] 
     mean_crash_point = [] 
     all_crash_point = [] 
@@ -98,15 +98,16 @@ if __name__ == '__main__':
     for size in window_sizes :
         crash_point[size] = []
     start = np.max(window_sizes)
-    stop = len(data) 
+    stop = len(data)
     jump_size = np.min(window_sizes)
+    jump_size = 11*20
     if jump_size >= 1000 : 
         jump_size = int(jump_size/2)
     max_windows = np.max(window_sizes)
     num_windows = len(window_sizes)
     for i in range(start, stop, jump_size):
         c_point = [] 
-        print("Fitting on data point on " + str(i) + " to " + str(i+max_windows))
+        print("Fitting on data point on " + str(i-max_windows) + " to " + str(i) + " of " + str(stop))
         for size in window_sizes : 
             xd = np.linspace(0.1, size, size)
             yd = data[i-size:i]
@@ -124,9 +125,10 @@ if __name__ == '__main__':
                         print("No fitting point on " + str(i) + " to " + str(i+max_windows))
                         break 
                     else : 
+                        print("No Fitting ... Try to fit data again ... ")
                         maxfev = 20000
-            c_time = int(popt[5]+i+size)
-            if c_time > i + size  and c_time < stop: 
+            c_time = int(popt[5]+i)
+            if c_time > i + size + 1  and c_time < stop and popt[2] > 0 : 
                 crash_point[size].append(c_time)
                 c_point.append(c_time)
                 all_crash_point.append(c_time)
@@ -138,30 +140,38 @@ if __name__ == '__main__':
                                             'winsize': size,
                                             'raw_tau': int(popt[5]),
                                             'tau' :  c_time},ignore_index=True)
+            else : 
+                print("Fitting Failed on " + str(i-max_windows) + " to " + str(i) + " of " + str(stop))
             median_point = np.median(c_point) 
             if not np.isnan(median_point) : 
                 mean_crash_point.append(median_point)
-
-
+    fit_df.to_csv("Dataset/fitted_result.csv",index=False)
     print('======= Clustering ============')
-    n_clusters = 4
 
+    k_mean = False
 
-    X = fit_df.drop(columns=['A','tau', 'winsize'])
-    clustering = SpectralClustering(n_clusters=n_clusters,
-        assign_labels="discretize",
-        random_state=0).fit(X)
-    y = clustering.labels_
-    fit_df['label'] = y 
-    
-    # clustering = KMeans(n_clusters=n_clusters).fit_predict(X)
-    # fit_df['label'] = clustering
+    n_clusters = 2
+
+    X = fit_df.drop(columns=['m','tau', 'winsize','raw_tau'])
+    if not k_mean : 
+        clustering = SpectralClustering(n_clusters=n_clusters,
+            assign_labels="discretize",
+            random_state=0).fit(X)
+        y = clustering.labels_
+        fit_df['label'] = y 
+    else : 
+        clustering = KMeans(n_clusters=n_clusters).fit_predict(X)
+        fit_df['label'] = clustering
     print('======= Clustering End ========')
     
     plot_all = False 
-    plot_mean = False
-    plot_each_window= False 
+    plot_mean = False 
+    plot_each_window= False   
     plot_clustering = True 
+    
+#    plt.figure()
+#    plt.plot(data)
+#    plt.show();
     
     if plot_all : 
         survive_time = [] 
