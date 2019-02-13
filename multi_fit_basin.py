@@ -93,9 +93,9 @@ class MyBounds(object):
             * intercept/coefficient less than 1e4
             * critical time
     '''
-    # o, m, A, B, C, tau
-    def __init__(self, xmax=[200, 1, 1e4, 0, 1e4, 100],
-                       xmin=[0, -1, -1e4, -1e4, -1e4, 1e-3]):
+    #                        o, m, A, B, C, tau
+    def __init__(self, xmax=[13, 0.1, 10, 0, 1.0, 550],
+                       xmin=[6, 0.9, 0, -1e4, -1.0, 11]):
         self.xmax = np.array(xmax)
         self.xmin = np.array(xmin)
 
@@ -129,8 +129,11 @@ def E_func(params):
     ret = y(xd, params[0], params[1], params[2], params[3], params[4], params[5])
 
     n = float(len(ret))
-    er = (ret - yd).dot(ret - yd) / n
-
+    try:
+        er = (ret - yd).dot(ret - yd) / n
+    except : 
+        pass 
+        
     if np.isnan(er):
         er = 1e10
     return er
@@ -168,7 +171,7 @@ if __name__ == '__main__':
     start = np.max(window_sizes)
     stop = len(data)
     jump_size = np.min(window_sizes)
-    jump_size = 11*20
+    jump_size = 11*60
     if jump_size >= 1000 : 
         jump_size = int(jump_size/2)
     max_windows = np.max(window_sizes)

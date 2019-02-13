@@ -74,7 +74,7 @@ def is_pass_params_rules(params):
     o, m, A, B, C, tau = params[0], params[1], params[2], params[3], params[4], params[5] 
     if abs(m) > 1 : 
         return False 
-    if o < 6 or o > 13 : 
+    if o < 0 or o > 40 : 
         return False 
     if abs(C) > 1 : 
         return False 
@@ -82,19 +82,19 @@ def is_pass_params_rules(params):
         return False 
     if A < 0 :
         return False 
-    if int(tau) <= 11 :
+    if int(tau) <= 11 or tau >= 550 :
         return False 
     return True 
 
-def init_fit_params(data): 
+def init_fit_params(data):  
     # Fit parameters 
     sp = data[-1]
-    o = 9.5    # Frequency = omega 
+    o = 9.5   # Frequency = omega 
     m = 0.5    # Power
     A = sp     # Intercept
     B = -1      
-    C = 0.5     # Coefficient
-    t = 20    # Critical time
+    C = 0.01   # Coefficient
+    t = 22*55    # Critical time
     p0 = [o, m, A, B, C, t]
     return p0 
 
@@ -129,7 +129,7 @@ if __name__ == '__main__':
     start = np.max(window_sizes)
     stop = len(data)
     jump_size = np.min(window_sizes)
-    jump_size = 11*5
+    jump_size = 110
     if jump_size >= 1000 : 
         jump_size = int(jump_size/2)
     max_windows = np.max(window_sizes)
@@ -142,7 +142,7 @@ if __name__ == '__main__':
             yd = data[i-size:i]
             
             p0 = init_fit_params(yd)
-            maxfev = 50000
+            maxfev = 80000
             while True : 
                 try :
                     popt, pcov = curve_fit(y, xd, yd, p0=p0, maxfev=maxfev)
@@ -152,12 +152,12 @@ if __name__ == '__main__':
                 except KeyboardInterrupt : 
                     break
                 except : 
-                    if maxfev >= 65000 :
+                    if maxfev >= 80000:
                         print("No fitting point on " + str(i) + " to " + str(i+max_windows))
                         break 
                     else : 
                         print("No Fitting ... Try to fit data again ... ")
-                        maxfev = 80000
+                        maxfev = 100000
             c_time = int(popt[5]+i)
             if is_pass_params_rules(popt) : 
                 params_fit = popt 
