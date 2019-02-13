@@ -3,6 +3,12 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error
 from random import uniform, randint
 
+def sum_squared_error(y_true, y_pred):
+    cost = 0 
+    for i in range(len(y_true)):
+        cost += (y_true[i]-y_pred[i]) ** 2
+    return cost 
+
 # Log periodic function, as per https://arxiv.org/abs/cond-mat/0201458v1
 def y(x, o, m, A, B, C, tau):
     ''' Target Log-Periodic Power Law (LPPL) function
@@ -20,29 +26,34 @@ class GeneticAlgo:
         self.next_generation = pd.DataFrame(columns=self.df_columns) 
         
         # init max-min range 
-        self.o_min, self.o_max = 6, 15  # Frequency = omega 
+        self.o_min, self.o_max = 6, 20  # Frequency = omega 
         self.m_min, self.m_max = 0.1, 0.9 
         self.A_min, self.A_max = 1, 10
-        self.B_min, self.B_max = -1e10, 0
+        self.B_min, self.B_max = -100, 0
         self.C_min, self.C_max = -1, 1 
-        self.tc_min,self.tc_max = 1, 220
+        self.tc_min,self.tc_max = 0.1, 20
 
     def generate_params(self, data, iter=1000):
-        for i in range(iter):
-            selection_params, all_selection_params = self.selection_mechanism(data)
-            breeding_params = self.breeding_mechanism(data, selection_params)
-            mutation_params = self.mutaion_mechanism(selection_params, all_selection_params, data)
-            self.culling_mechanism(selection_params, breeding_params, mutation_params)
-        try : 
-            m = self.next_generation['m'][0]  
-            A = self.next_generation['A'][0]  
-            o = self.next_generation['o'][0]  
-            B = self.next_generation['B'][0]  
-            C = self.next_generation['C'][0]  
-            tc = self.next_generation['tc'][0] 
-        except : 
-            o, m, A, B, C, tc = self.generate_params(data, iter=iter)
-        return o, m, A, B, C, tc
+        while True : 
+            self.next_generation = pd.DataFrame(columns=self.df_columns) 
+            for i in range(iter):
+                selection_params, all_selection_params = self.selection_mechanism(data)
+                breeding_params = self.breeding_mechanism(data, selection_params)
+                mutation_params = self.mutaion_mechanism(selection_params, all_selection_params, data)
+                self.culling_mechanism(selection_params, breeding_params, mutation_params)
+            n = len(self.next_generation) - 1
+            if n >= 2 : 
+                choose = randint(1,n) 
+                try : 
+                    m = self.next_generation['m'][choose]  
+                    A = self.next_generation['A'][choose]  
+                    o = self.next_generation['o'][choose]  
+                    B = self.next_generation['B'][choose]  
+                    C = self.next_generation['C'][choose]  
+                    tc = self.next_generation['tc'][choose]     
+                    return o, m, A, B, C, tc
+                except : 
+                    pass
 
     def select_best_fit(self, params, n_best=25):
         params = params.sort_values(by=['mse'], ascending=False) 
@@ -68,7 +79,7 @@ class GeneticAlgo:
         for i in range(n_random):
             o, m, A, B, C, tc = self.init_selection_params()
             y_fit = y(xd, o, m, A, B, C, tc)
-            mse = mean_squared_error(data, y_fit)
+            mse = sum_squared_error(data, y_fit)
             params = params.append({'o' : o, 
                                     'm' : m, 
                                     'A' : A, 
@@ -148,7 +159,7 @@ class GeneticAlgo:
         for i in range(iter):
             o, m, A, B, C, tc = self.generate_offspring(best_selection_params) 
             y_fit = y(xd, o, m, A, B, C, tc)
-            mse = mean_squared_error(data, y_fit)
+            mse = sum_squared_error(data, y_fit)
             params = params.append({'o' : o, 
                                     'm' : m, 
                                     'A' : A, 
@@ -200,7 +211,7 @@ class GeneticAlgo:
         for i in range(len(all_selection_params)):
             o, m, A, B, C, tc = self.generate_mutation_params(all_selection_params, i, m_range, o_range, A_range, B_range, C_range, tc_range)
             y_fit = y(xd, o, m, A, B, C, tc)
-            mse = mean_squared_error(data, y_fit)
+            mse = sum_squared_error(data, y_fit)
             params = params.append({'o' : o, 
                                     'm' : m, 
                                     'A' : A, 
@@ -218,13 +229,13 @@ class GeneticAlgo:
     """
     def culling_mechanism(self, selection_params, breeding_params, mutation_params):
         params = self.next_generation.append(selection_params, ignore_index=True).append(breeding_params, ignore_index=True).append(mutation_params, ignore_index=True)
-        # params = params[(params.o >= self.o_min) & (params.o <= self.o_max)]
-        params = params[params.o >= 0]
-        # params = params[(params.m >= self.m_min) & (params.m <= self.m_max)]
-        params = params[(params.A >= self.A_min) & (params.A <= self.A_max)]
+        params = params[(params.o >= self.o_min) & (params.o <= self.o_max)]
+        # params = params[params.o >= 1]
+        params = params[(params.m >= self.m_min) & (params.m <= self.m_max)]
+        # params = params[(params.A >= self.A_min) & (params.A <= self.A_max)]
         # params = params[(params.B >= self.B_min) & (params.B <= self.B_max)]
         # params = params[(params.C >= self.C_min) & (params.C <= self.C_max)]
-        # params = params[(params.tc >= self.tc_min) & (params.tc <= self.tc_max)]
+        params = params[(params.tc >= self.tc_min) & (params.tc <= self.tc_max)]
         self.next_generation = self.select_best_fit(params)
             
 

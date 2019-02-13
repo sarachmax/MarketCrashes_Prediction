@@ -5,8 +5,16 @@ from scipy.signal import argrelextrema
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 from random import uniform
+from GA_initparam import GeneticAlgo
 
-# Log periodic function, as per https://arxiv.org/abs/cond-mat/0201458v1
+ga_generator = GeneticAlgo() 
+
+def sum_squared_error(y_true, y_pred):
+    cost = 0 
+    for i in range(len(y_true)):
+        cost += (y_true[i]-y_pred[i]) ** 2
+    return cost 
+
 def y(x, o, m, A, B, C, tau):
     ''' Target Log-Periodic Power Law (LPPL) function
         Note: Scaled 'B' -> -1.0
@@ -19,7 +27,7 @@ def y(x, o, m, A, B, C, tau):
 def y_minimize(params, x, y):
     o, m, A, B, C, tau = params[0], params[1], params[2], params[3], params[4], params[5]
     ret = A + B*tau**m * x**m + C * tau**m * x**m * np.cos(o * np.log(x))
-    return mean_squared_error(y, ret)
+    return sum_squared_error(y, ret)
     
 def init_fit_params(data): 
     # Fit parameters 
@@ -32,20 +40,20 @@ def init_fit_params(data):
     # C = np.std(data)/np.mean(data) # Coefficient
     # t = abs(np.argmax(data)-np.argmin(data))/2 # Critical time
 
-    o = 11  # Frequency = omega 
-    m = 0.5   # Power
-    A = sp     # Intercept
-    B = -1      
-    C = 0.5
-    t = 110   # Critical time
-    # print("Params: init         \no:", o, 
-    #                             "\nm:",  m, 
-    #                             "\nA:",  A, 
-    #                             "\nB:", B, 
-    #                             "\nC:",  C,
-    #                             "\ntau:", t)
+    # o = 11  # Frequency = omega 
+    # m = 0.5   # Power
+    # A = sp     # Intercept
+    # B = -1      
+    # C = 0.5
+    # t = 110   # Critical time
+    o, m, A, B, C, t = ga_generator.generate_params(data, 100)
+    print("Params: init         \no:", o, 
+                                "\nm:",  m, 
+                                "\nA:",  A, 
+                                "\nB:", B, 
+                                "\nC:",  C,
+                                "\ntau:", t)
     p0 = [o, m, A, B, C, t]
-
     return p0 
 
 def is_pass_params_rules(params):
@@ -67,15 +75,17 @@ def is_pass_params_rules(params):
         return False 
     return True 
 
-def curve_fitting(yd, maxfev=200000, p0=None):
+def fitting_params(yd, p0=None):
     if p0 == None : 
         p0 = init_fit_params(yd)
     try : 
-        popt, pcov = curve_fit(y, xd, yd, p0=p0, maxfev=maxfev, check_finite=True) 
+        bounds=((6, 0.1, 1, -1,-1000, 0.01),(40, 0.9, 10, 1,0,220))
+        res = minimize(y_minimize, p0, (xd,yd),method='Nelder-Mead', bounds=bounds, options={'disp': True})
+        params = res.x
     except : 
         print("Cannot find fitted parameters ")   
-        popt = [None, None, None, None, None, None]         
-    return popt 
+        params = [None, None, None, None, None, None]         
+    return params 
 
 def get_local_minmax(data, n=55):
     lmin = argrelextrema(data, np.less_equal, order=n)[0]
@@ -90,47 +100,33 @@ def find_nearest(array, value, start):
             return array[i]
     return array[idx]
 
-dataset = pd.read_csv("Dataset/SEHK_30Min_2800.csv")
+dataset = pd.read_csv("Dataset/SEHK_1D_2800.csv")
 fit_df = pd.DataFrame(columns=['winsize','t','o', 'm', 'A', 'B', 'C', 'tau','near_min','near_max','pred_err_max','pred_err_min','mse','pass','figname'])
     
 data = dataset['Close']
 data = np.array(data)
 data = np.log(data)
 
-day_size = 11
-window_sizes = [60*day_size] 
-predict_size = 60*day_size
+day_size = 1
+window_sizes = [60,120,240,480,900] 
+predict_size = 240
 start = np.max(window_sizes)+1
 stop = len(data) - predict_size
-jump_size = day_size*11
-p0={}
-st_p0 = True 
+jump_size = day_size*1
 for i in range(start, stop, jump_size):
     for size in window_sizes : 
-        if st_p0 : 
-            p0[size] = None
         xd = np.linspace(0.1, size, size) 
         yd = data[i-size:i] 
         print("Curve Fitting process has been started.") 
-        params_fit = curve_fitting(yd, p0=p0[size])
+        # params_fit = curve_fitting(yd, p0=p0[size])
+        params_fit = fitting_params(yd)
         o, m, A, B, C, tau = params_fit[0], params_fit[1], params_fit[2], params_fit[3], params_fit[4], params_fit[5]
-        # params_fit_new = curve_fitting(yd, p0=None)
-        # on, mn, An, Bn, Cn, taun = params_fit_new[0], params_fit_new[1], params_fit_new[2], params_fit_new[3], params_fit_new[4], params_fit_new[5]
-        # if tau != None and taun != None :
-        #     y1 = y(xd, o, m, A, B, C, tau)
-        #     y2 = y(xd, on, mn, An, Bn, Cn, taun)
-        #     _mse1 = mean_squared_error(yd, y1)
-        #     _mse2 = mean_squared_error(yd, y2) 
-        #     if _mse2 < _mse1 : 
-        #         o, m, A, B, C, tau = on, mn, An, Bn, Cn, taun 
-        # if tau == None and taun != None : 
-        #     o, m, A, B, C, tau = on, mn, An, Bn, Cn, taun
         if tau != None : 
             curve_result = y(xd, o, m, A, B, C, tau)
             mse = mean_squared_error(yd, curve_result)
             x_pred = np.linspace(0.1, size+int(tau)+1, size+int(tau)+1)
             y_pred = y(x_pred, o, m, A, B, C, tau)
-            if abs(np.min(curve_result)-np.max(curve_result)) > 0.001 and np.mean(curve_result) != np.max(curve_result) and tau+size <= size+predict_size and abs(A-np.mean(yd)) < 2 :                        
+            if tau+size <= size+predict_size :                        
                 print("MSE : ", mse,'\n')
                 # if is_pass_params_rules(params_fit):
                 true_data = data[i-size:i+predict_size]
@@ -148,10 +144,12 @@ for i in range(start, stop, jump_size):
                 plt.axvline(near_max, color='black', label='Nearest Lowest') 
                 plt.axvline(tau+size, color='blue', label='tc_pred')
                 plt.axvline(size, color='yellow', label='trained_point')
+                plt.ylim(np.min(true_data)-0.1, np.max(true_data)+0.1)
+                plt.xlim(0, len(true_data))
                 plt.legend()
                 # plt.show()
                 figname = "win_"+ str(size)+ "_from_"+str(i-size) + "_to_" + str(i) + '.png'
-                plt.savefig("CurveFitResult/img/"+figname, dpi=300)
+                plt.savefig("GAFitResult/img/"+figname, dpi=300)
                 print("Saved img to : " + figname)
                 fit_df = fit_df.append( {'o':  o, 
                                     'm':  m, 
@@ -178,17 +176,15 @@ for i in range(start, stop, jump_size):
                                 "\npass:", pass_rule,
                                 "\n" +'^'*20)
                 
-                p0[size] = [o, m, A, B, C, tau] 
-    if st_p0 : 
-        st_p0 = False 
-fit_df.to_csv('CurveFitResult/fitting_log.csv')
+
+fit_df.to_csv('GAFitResult/fitting_log.csv')
 print("Fitting done !")
 
 print("Summarize")
 abs_pred_err = (abs(fit_df['pred_err_max']))
 print("Average Error : ", abs_pred_err.mean())
 
-fit_df = pd.read_csv('CurveFitResult/fitting_log.csv')
+fit_df = pd.read_csv('GAFitResult/fitting_log.csv')
 t_train = fit_df['t']
 tc_pred = fit_df['tau']
 plt.title("Review t vs tc")
@@ -198,4 +194,4 @@ plt.xlabel('t_train')
 plt.ylabel('tc')
 # plt.show() 
 figname = 't_crash.png'
-plt.savefig("CurveFitResult/"+figname)
+plt.savefig("GAFitResult/"+figname)
